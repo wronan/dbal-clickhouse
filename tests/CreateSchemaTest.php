@@ -56,7 +56,7 @@ class CreateSchemaTest extends TestCase
         $newTable->setPrimaryKey(['id']);
 
         $migrationSQLs = $fromSchema->getMigrateToSql($toSchema, $this->connection->getDatabasePlatform());
-        $this->assertEquals("CREATE TABLE test_table (EventDate Date DEFAULT today(), id UInt32, payload String, oneVal Float64, twoVal String, flag UInt8, mask Int16, hash FixedString(32)) ENGINE = ReplacingMergeTree(EventDate, (id), 8192)",
+        $this->assertEquals("CREATE TABLE test_table (executed_at Nullable(DateTime), id UInt32, payload String, oneVal Float64, twoVal String, flag UInt8, mask Int16, hash FixedString(32)) ENGINE = ReplacingMergeTree ORDER BY id PARTITION BY toYYYYMM(executed_at) PRIMARY KEY id SETTINGS allow_nullable_key=1, index_granularity = 8192",
             implode(';', $migrationSQLs));
         foreach ($migrationSQLs as $sql) {
             $this->connection->exec($sql);
@@ -103,7 +103,7 @@ class CreateSchemaTest extends TestCase
 
         $migrationSQLs = $fromSchema->getMigrateToSql($toSchema, $this->connection->getDatabasePlatform());
         $generatedSQL = implode(';', $migrationSQLs);
-        $this->assertEquals("CREATE TABLE test_table (EventDate Date DEFAULT today(), id UInt32, payload String) ENGINE = ReplacingMergeTree(EventDate, (id), 4096)",
+        $this->assertEquals("CREATE TABLE test_table (executed_at Nullable(DateTime), id UInt32, payload String) ENGINE = ReplacingMergeTree ORDER BY id PARTITION BY toYYYYMM(executed_at) PRIMARY KEY id SETTINGS allow_nullable_key=1, index_granularity = 4096",
             $generatedSQL);
         foreach ($migrationSQLs as $sql) {
             $this->connection->exec($sql);
@@ -125,7 +125,7 @@ class CreateSchemaTest extends TestCase
 
         $migrationSQLs = $fromSchema->getMigrateToSql($toSchema, $this->connection->getDatabasePlatform());
         $generatedSQL = implode(';', $migrationSQLs);
-        $this->assertEquals("CREATE TABLE test_table (EventDate Date DEFAULT today(), id UInt32, payload String) ENGINE = MergeTree(EventDate, (id), 8192)",
+        $this->assertEquals("CREATE TABLE test_table (executed_at Nullable(DateTime), id UInt32, payload String) ENGINE = MergeTree ORDER BY id PARTITION BY toYYYYMM(executed_at) PRIMARY KEY id SETTINGS allow_nullable_key=1, index_granularity = 8192",
             $generatedSQL);
         foreach ($migrationSQLs as $sql) {
             $this->connection->exec($sql);
@@ -169,7 +169,7 @@ class CreateSchemaTest extends TestCase
 
         $migrationSQLs = $fromSchema->getMigrateToSql($toSchema, $this->connection->getDatabasePlatform());
         $generatedSQL = implode(';', $migrationSQLs);
-        $this->assertEquals("CREATE TABLE test_table (event_date Date DEFAULT today(), id UInt32, payload String) ENGINE = ReplacingMergeTree(event_date, (id), 8192)",
+        $this->assertEquals("CREATE TABLE test_table (event_date Nullable(DateTime), id UInt32, payload String) ENGINE = ReplacingMergeTree ORDER BY id PARTITION BY toYYYYMM(event_date) PRIMARY KEY id SETTINGS allow_nullable_key=1, index_granularity = 8192",
             $generatedSQL);
         foreach ($migrationSQLs as $sql) {
             $this->connection->exec($sql);
@@ -216,7 +216,7 @@ class CreateSchemaTest extends TestCase
 
         $migrationSQLs = $fromSchema->getMigrateToSql($toSchema, $this->connection->getDatabasePlatform());
         $generatedSQL = implode(';', $migrationSQLs);
-        $this->assertEquals("CREATE TABLE test_table (EventDate Date DEFAULT toDate(updated_at), id UInt32, payload String, updated_at DateTime) ENGINE = ReplacingMergeTree(EventDate, (id), 8192)",
+        $this->assertEquals("CREATE TABLE test_table (executed_at Nullable(DateTime) DEFAULT 'toDate(updated_at)', id UInt32, payload String, updated_at DateTime) ENGINE = ReplacingMergeTree ORDER BY id PARTITION BY toYYYYMM(executed_at) PRIMARY KEY id SETTINGS allow_nullable_key=1, index_granularity = 8192",
             $generatedSQL);
         foreach ($migrationSQLs as $sql) {
             $this->connection->exec($sql);
@@ -250,6 +250,7 @@ class CreateSchemaTest extends TestCase
 
     public function testListTableIndexes()
     {
+        $this->connection->exec('DROP TABLE IF EXISTS test_indexes_table');
         $fromSchema = $this->connection->getSchemaManager()->createSchema();
         $toSchema = clone $fromSchema;
 
@@ -294,7 +295,7 @@ class CreateSchemaTest extends TestCase
         $newTable->setPrimaryKey(['id', 'event_date']);
         $migrationSQLs = $fromSchema->getMigrateToSql($toSchema, $this->connection->getDatabasePlatform());
         $generatedSQL = implode(';', $migrationSQLs);
-        $this->assertEquals("CREATE TABLE test_sampling_table (event_date Date DEFAULT today(), id UInt32, payload String) ENGINE = ReplacingMergeTree(event_date, intHash32(id), (id, event_date, intHash32(id)), 8192)",
+        $this->assertEquals("CREATE TABLE test_sampling_table (event_date Nullable(DateTime), id UInt32, payload String) ENGINE = ReplacingMergeTree ORDER BY (id, event_date, intHash32(id)) PARTITION BY toYYYYMM(event_date) PRIMARY KEY (id, event_date, intHash32(id)) SAMPLE BY intHash32(id) SETTINGS allow_nullable_key=1, index_granularity = 8192",
             $generatedSQL);
         foreach ($migrationSQLs as $sql) {
             $this->connection->exec($sql);

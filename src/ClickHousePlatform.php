@@ -633,6 +633,8 @@ class ClickHousePlatform extends AbstractPlatform
     protected function _getCreateTableSQL($tableName, array $columns, array $options = []) : array
     {
         $engine        = ! empty($options['engine']) ? $options['engine'] : 'ReplacingMergeTree';
+        $createTableOptions = [];
+        $createTableSettings = [];
         $engineOptions = '';
 
         if (isset($options['uniqueConstraints']) && ! empty($options['uniqueConstraints'])) {
@@ -658,15 +660,14 @@ class ClickHousePlatform extends AbstractPlatform
             ],
             true
         )) {
-            $indexGranularity   = ! empty($options['indexGranularity']) ? $options['indexGranularity'] : 8192;
             $samplingExpression = '';
 
             /**
              * eventDateColumn section
              */
             $dateColumnParams = [
-                'type' => Type::getType('date'),
-                'default' => 'today()',
+                'type' => Type::getType('datetime'),
+                'notnull' => false,
             ];
             if (! empty($options['eventDateProviderColumn'])) {
                 $options['eventDateProviderColumn'] = trim($options['eventDateProviderColumn']);
@@ -719,7 +720,7 @@ class ClickHousePlatform extends AbstractPlatform
                     );
                 }
 
-                $eventDateColumnName = 'EventDate';
+                $eventDateColumnName = 'executed_at';
             } elseif (isset($columns[$options['eventDateColumn']])) {
                 if (! ($columns[$options['eventDateColumn']]['type'] instanceof DateType)) {
                     throw new \Exception(
@@ -748,20 +749,23 @@ class ClickHousePlatform extends AbstractPlatform
 
             $primaryIndex = array_values($options['primary']);
             if (! empty($options['samplingExpression'])) {
-                $samplingExpression = ', ' . $options['samplingExpression'];
+                $samplingExpression = $options['samplingExpression'];
                 $primaryIndex[]     = $options['samplingExpression'];
             }
+            $primaryIndex = array_unique($primaryIndex);
 
-            $engineOptions = sprintf(
-                '(%s%s, (%s), %d',
-                $eventDateColumnName,
-                $samplingExpression,
-                implode(
-                    ', ',
-                    array_unique($primaryIndex)
-                ),
-                $indexGranularity
-            );
+            if (isset($dateColumnParams['notnull']) && !$dateColumnParams['notnull']) {
+                $createTableSettings[] = 'allow_nullable_key=1';
+            }
+            $createTableSettings[] = sprintf('index_granularity = %s', ! empty($options['indexGranularity']) ? $options['indexGranularity'] : 8192);
+
+            $createTableOptions[] = sprintf('ORDER BY %s', $this->formatOrderBy($primaryIndex));
+            $createTableOptions[] = sprintf('PARTITION BY toYYYYMM(%s)', $eventDateColumnName);
+            $createTableOptions[] = sprintf('PRIMARY KEY %s', $this->formatPrimaryKey($primaryIndex));
+            if (! empty($samplingExpression)) {
+                $createTableOptions[] = sprintf('SAMPLE BY %s', $samplingExpression);
+            }
+            $createTableOptions[] = sprintf('SETTINGS %s', implode(', ', $createTableSettings));
 
             /**
              * any specific MergeTree* table parameters
@@ -787,21 +791,32 @@ class ClickHousePlatform extends AbstractPlatform
                     );
                 }
 
-                $engineOptions .= ', ' . $columns[$options['versionColumn']]['name'];
+                $engineOptions = sprintf('(%s)',$columns[$options['versionColumn']]['name']);
             }
-
-            $engineOptions .= ')';
         }
 
-        $sql[] = sprintf(
-            'CREATE TABLE %s (%s) ENGINE = %s%s',
+        $sql[] = trim(sprintf(
+            'CREATE TABLE %s (%s) ENGINE = %s%s %s',
             $tableName,
             $this->getColumnDeclarationListSQL($columns),
             $engine,
-            $engineOptions
-        );
+            $engineOptions,
+            implode(' ', $createTableOptions)
+        ));
 
         return $sql;
+    }
+
+    private function formatPrimaryKey(array $orderBy): String {
+        if (count($orderBy) > 1) {
+            return sprintf('(%s)', implode(', ', $orderBy));
+        } else {
+            return array_pop($orderBy);
+        }
+    }
+
+    private function formatOrderBy(array $orderBy): String {
+        return $this->formatPrimaryKey($orderBy);
     }
 
     /**

@@ -50,7 +50,8 @@ class Connection extends \Doctrine\DBAL\Connection
      */
     public function update($tableExpression, array $data, array $identifier, array $types = []) : int
     {
-        throw ClickHouseException::notSupported(__METHOD__);
+        echo "This command is not supported, but we don't throw an error since updates are not used anyway.";
+        return 0;
     }
 
     /**

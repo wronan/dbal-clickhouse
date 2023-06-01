@@ -67,14 +67,18 @@ class ClickHouseSchemaManager extends AbstractSchemaManager
         $tableView = $this->_getPortableViewDefinition(['name' => $table]);
 
         preg_match(
-            '/MergeTree\(([\w+, \(\)]+)(?= \(((?:[^()]|\((?2)\))+)\),)/mi',
+            '/primary key (.*)/mi',
             $tableView->getSql(),
             $matches
         );
 
-        if (is_array($matches) && array_key_exists(2, $matches)) {
+        if (is_array($matches) && array_key_exists(1, $matches)) {
+            $match = $matches[1];
+            if ($match[0] === '(' && $match[-1] === ')'){
+                $match = substr($match, 1, -1);
+            }
             $indexColumns = array_filter(
-                array_map('trim', explode(',', $matches[2])),
+                array_map('trim', explode(',', $match)),
                 function (string $column) {
                     return strpos($column, '(') === false;
                 }
